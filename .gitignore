@@ -1,1 +1,4 @@
 *.xcuserstate
+/.swiftpm/xcode/xcuserdata
+/Example/SystemInfoExample.xcodeproj/project.xcworkspace/xcuserdata
+Example/SystemInfoExample.xcodeproj/project.xcworkspace/xcuserdata/pkh0225.xcuserdatad/UserInterfaceState.xcuserstate
