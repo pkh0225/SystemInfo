@@ -2,7 +2,9 @@
 
 iOS 앱에서 CPU, 메모리, FPS, 발열 상태를 오버레이로 확인할 수 있는 Swift Package입니다.
 
-![SystemInfo overlay screenshot](screensshot.png)
+<p align="center">
+  <img src="screensshot.png" width="280" alt="SystemInfo overlay screenshot">
+</p>
 
 ## 설치
 
