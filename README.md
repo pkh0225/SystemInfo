@@ -27,6 +27,9 @@ targets: [
 ```swift
 import SystemInfo
 
+// 설정 저장
+SystemInfoManager.shared.saveUserDefaults()
+
 // 저장된 설정 복원
 SystemInfoManager.shared.loadUserDefaults()
 
