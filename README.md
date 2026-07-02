@@ -2,6 +2,8 @@
 
 iOS 앱에서 CPU, 메모리, FPS, 발열 상태를 오버레이로 확인할 수 있는 Swift Package입니다.
 
+https://github.com/pkh0225/SystemInfo/blob/main/screensshot.png
+
 ## 설치
 
 ```swift
