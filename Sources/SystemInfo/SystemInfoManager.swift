@@ -69,6 +69,17 @@ public class SystemInfoManager {
         }
     }
 
+    /// 발열 상태를 오버레이에 표시할지 여부.
+    /// false면 오버레이 없이 화면 경고·알럿만 동작합니다.
+    public var isThermalOverlayVisible: Bool = false {
+        didSet {
+            guard isThermalOverlayVisible != oldValue else { return }
+            Task { @MainActor in
+                self.refreshThermalOverlayRow()
+            }
+        }
+    }
+
     // MARK: - Overlay State (Common)
 
     var overlayView: SystemInfoOverlayView?
@@ -89,14 +100,17 @@ public class SystemInfoManager {
     var screenWarningLastPulseEndedAt: [ScreenWarningKind: CFTimeInterval] = [:]
     var screenWarningPulseTasks: [ScreenWarningKind: Task<Void, Never>] = [:]
 
-    // MARK: - Resource Warning State
+    // MARK: - CPU Warning State
 
-    var consecutiveCpuHighSamples = 0
-    var consecutiveCpuLowSamples = 0
+    /// CPU가 임계값 이상으로 올라간 최초 시각. 임계값 아래로 내려가면 nil이 됩니다.
+    var cpuHighStartedAt: CFTimeInterval?
 
     private init() {
-        resourceHelper.onUpdate = { [weak self] snapshot in
-            self?.handleResourceSnapshot(snapshot)
+        resourceHelper.onMemoryUpdate = { [weak self] memoryBytes in
+            self?.handleMemorySample(memoryBytes)
+        }
+        resourceHelper.onCpuUpdate = { [weak self] cpuPercent in
+            self?.handleCpuSample(cpuPercent)
         }
         fpsHelper.onUpdate = { [weak self] snapshot in
             self?.handleFpsSnapshot(snapshot)

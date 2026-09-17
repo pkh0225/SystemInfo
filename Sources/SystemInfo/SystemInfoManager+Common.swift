@@ -1,7 +1,7 @@
 //
 //  SystemInfoManager+Common.swift
 //
-//  Resource / FPS / Thermal 3개 기능이 공통으로 사용하는
+//  Resource / FPS / Thermal 기능이 공통으로 사용하는
 //  오버레이 뷰 생성·정리, UserDefaults 저장 로직을 담당합니다.
 //
 
@@ -14,11 +14,23 @@ extension SystemInfoManager {
         static let thermalCheck = "WG_USERDEFAULT_DEBUG_THERMAL_CHECK"
     }
 
+    private static var thermalCheckDefaultEnabled: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
     public func loadUserDefaults() {
         let defaults = UserDefaults.standard
         isResourceReport = defaults.object(forKey: UserDefaultsKey.resourceCheck) as? Bool ?? false
         isFpsReport = defaults.object(forKey: UserDefaultsKey.fpsCheck) as? Bool ?? false
-        isThermalReport = defaults.object(forKey: UserDefaultsKey.thermalCheck) as? Bool ?? false
+
+        // 값이 없으면(= 개발자 메뉴에서 직접 켠 적 없음) 오버레이 없이 경고 기능만 동작합니다.
+        let storedThermalCheck = defaults.object(forKey: UserDefaultsKey.thermalCheck) as? Bool
+        isThermalOverlayVisible = storedThermalCheck == true
+        isThermalReport = storedThermalCheck ?? Self.thermalCheckDefaultEnabled
     }
 
     func saveUserDefaults() {
@@ -29,11 +41,10 @@ extension SystemInfoManager {
 
     @MainActor
     func ensureOverlayView() -> SystemInfoOverlayView? {
-        
         if overlayView == nil {
             let overlay = SystemInfoOverlayView(frame: CGRect(
-                x: 0,
-                y: keyWindow()?.safeAreaInsets.top ?? .zero,
+                x: 50,
+                y: (keyWindow()?.safeAreaInsets.top ?? .zero) + 50,
                 width: 120,
                 height: 20
             ))
@@ -84,6 +95,7 @@ extension SystemInfoManager {
     private func disableAllReportsFromOverlay() {
         isResourceReport = false
         isFpsReport = false
+        isThermalOverlayVisible = false
         isThermalReport = false
         saveUserDefaults()
     }

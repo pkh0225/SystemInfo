@@ -23,18 +23,18 @@ extension SystemInfoManager {
         let iconName: String
     }
 
+    /// 조건이 유지되는 동안 계속 표시합니다. (깜빡임 펄스/쿨다운 없음)
     @MainActor
     func setSustainedScreenWarning(_ kind: ScreenWarningKind, isActive: Bool, value: String = "") {
         if isActive {
             screenWarningValues[kind] = value
             screenWarningSustained.insert(kind)
-            refreshScreenWarningOverlay()
         }
         else {
             screenWarningSustained.remove(kind)
             screenWarningValues.removeValue(forKey: kind)
-            refreshScreenWarningOverlay()
         }
+        refreshScreenWarningOverlay()
     }
 
     @MainActor
@@ -241,32 +241,29 @@ extension SystemInfoManager {
         dimView.layer.removeAllAnimations()
         badgeView.layer.removeAllAnimations()
         screenWarningBlinkToken &+= 1
-        let token = screenWarningBlinkToken
-        dimView.alpha = 0.25
-        badgeView.alpha = 0.45
-        runScreenWarningBlinkCycle(dimView: dimView, badgeView: badgeView, token: token)
-    }
 
-    @MainActor
-    private func runScreenWarningBlinkCycle(dimView: UIView, badgeView: UIView, token: UInt) {
-        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-            dimView.alpha = 0.7
-            badgeView.alpha = 0.62
-        } completion: { [weak self] finished in
-            guard let self, finished, token == self.screenWarningBlinkToken else { return }
+        dimView.layer.opacity = 0.25
+        badgeView.layer.opacity = 0.45
 
-            UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-                dimView.alpha = 0.25
-                badgeView.alpha = 0.45
-            } completion: { [weak self] finished in
-                guard let self,
-                      finished,
-                      token == self.screenWarningBlinkToken,
-                      dimView.superview != nil else { return }
+        let timing = CAMediaTimingFunction(name: .easeInEaseOut)
 
-                self.runScreenWarningBlinkCycle(dimView: dimView, badgeView: badgeView, token: token)
-            }
-        }
+        let dimAnimation = CABasicAnimation(keyPath: "opacity")
+        dimAnimation.fromValue = 0.25
+        dimAnimation.toValue = 0.7
+        dimAnimation.duration = 0.25
+        dimAnimation.autoreverses = true
+        dimAnimation.repeatCount = .infinity
+        dimAnimation.timingFunction = timing
+        dimView.layer.add(dimAnimation, forKey: "screenWarningBlink")
+
+        let badgeAnimation = CABasicAnimation(keyPath: "opacity")
+        badgeAnimation.fromValue = 0.45
+        badgeAnimation.toValue = 0.62
+        badgeAnimation.duration = 0.25
+        badgeAnimation.autoreverses = true
+        badgeAnimation.repeatCount = .infinity
+        badgeAnimation.timingFunction = timing
+        badgeView.layer.add(badgeAnimation, forKey: "screenWarningBlink")
     }
 
     @MainActor
@@ -274,6 +271,8 @@ extension SystemInfoManager {
         screenWarningBlinkToken &+= 1
         screenWarningDimView?.layer.removeAllAnimations()
         screenWarningBadgeView?.layer.removeAllAnimations()
+        screenWarningDimView?.layer.opacity = 1
+        screenWarningBadgeView?.layer.opacity = 1
         screenWarningOverlay?.removeFromSuperview()
         screenWarningOverlay = nil
         screenWarningDimView = nil

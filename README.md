@@ -37,7 +37,14 @@ SystemInfoManager.shared.loadUserDefaults()
 SystemInfoManager.shared.isResourceReport = true
 SystemInfoManager.shared.isFpsReport = true
 SystemInfoManager.shared.isThermalReport = true
+
+// 발열은 감시와 화면 표시를 따로 켤 수 있습니다.
+// false면 오버레이 없이 화면 경고·알럿만 동작합니다.
+SystemInfoManager.shared.isThermalOverlayVisible = true
 ```
+
+`loadUserDefaults()` 는 발열 설정이 저장된 적 없으면 DEBUG 빌드에서 감시만 켭니다.
+오버레이는 사용자가 직접 켠 경우(`true` 로 저장된 경우)에만 표시됩니다.
 
 ## 테스트
 

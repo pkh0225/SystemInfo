@@ -30,13 +30,15 @@ final class SystemInfoThermalHelper {
         publishSnapshot(previousState: currentState)
 
         if thermalStateObserver == nil {
+            nonisolated(unsafe) weak let helper = self
             thermalStateObserver = NotificationCenter.default.addObserver(
                 forName: ProcessInfo.thermalStateDidChangeNotification,
                 object: nil,
                 queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.handleThermalStateDidChange()
+            ) { _ in
+                guard let helper else { return }
+                MainActor.assumeIsolated {
+                    helper.handleThermalStateDidChange()
                 }
             }
         }

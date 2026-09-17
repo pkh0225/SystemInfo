@@ -7,23 +7,20 @@
 import UIKit
 
 final class SystemInfoResourceHelper {
-    struct Snapshot {
-        let memoryBytes: UInt64
-        let cpuPercent: Double
-        let isBaselineCpuSample: Bool
-    }
-
-    var onUpdate: (@MainActor (Snapshot) -> Void)?
+    /// 메모리와 CPU는 각자 측정해서 각자 전달합니다.
+    var onMemoryUpdate: (@MainActor (UInt64) -> Void)?
+    var onCpuUpdate: (@MainActor (Double) -> Void)?
 
     private(set) var isMonitoring = false
     private(set) var latestCpuPercent: Double = 0
 
-    private var memoryUpdateTimer: Timer?
-    private var cpuCheckTimer: Timer?
+    private var sampleTimer: Timer?
     private var lastCpuSampleMachTime: UInt64 = 0
     private var lastCpuTotalMicroseconds: UInt64 = 0
-    private var cpuSampleSequence: UInt64 = 0
+    private var isCpuSampleInFlight = false
 
+    /// 메모리·CPU 공통 측정 주기.
+    private static let sampleInterval: TimeInterval = 1.0
     private static let minimumCpuSampleInterval: TimeInterval = 0.8
 
     private static var machTimebase: mach_timebase_info = {
@@ -39,41 +36,14 @@ final class SystemInfoResourceHelper {
         guard !isMonitoring else { return }
         isMonitoring = true
 
-        lastCpuSampleMachTime = 0
-        lastCpuTotalMicroseconds = 0
-        latestCpuPercent = 0
+        resetCpuSampleState()
 
-        publishSnapshot(isBaselineCpuSample: false)
-
-        memoryUpdateTimer?.invalidate()
-        memoryUpdateTimer = Timer.schedule(repeatInterval: 0.5, delayStart: false) { [weak self] _ in
+        sampleTimer?.invalidate()
+        sampleTimer = Timer.schedule(repeatInterval: Self.sampleInterval, delayStart: false) { [weak self] _ in
             guard let self else { return }
-            Task { @MainActor in
-                self.publishSnapshot(isBaselineCpuSample: false)
-            }
-        }
-
-        cpuCheckTimer?.invalidate()
-        cpuCheckTimer = Timer.schedule(repeatInterval: 1.0, delayStart: false) { [weak self] _ in
-            guard let self else { return }
-            self.cpuSampleSequence &+= 1
-            let sampleSequence = self.cpuSampleSequence
-            let lastSampleMachTime = self.lastCpuSampleMachTime
-            let lastTotalMicroseconds = self.lastCpuTotalMicroseconds
-            Task {
-                let result = await Self.measureCpuUsageDelta(
-                    lastSampleMachTime: lastSampleMachTime,
-                    lastTotalMicroseconds: lastTotalMicroseconds
-                )
-                await MainActor.run {
-                    guard sampleSequence == self.cpuSampleSequence else { return }
-                    guard result.isValidSample else { return }
-
-                    self.lastCpuSampleMachTime = result.sampleMachTime
-                    self.lastCpuTotalMicroseconds = result.totalMicroseconds
-                    self.latestCpuPercent = result.percent
-                    self.publishSnapshot(isBaselineCpuSample: result.isBaselineSample)
-                }
+            MainActor.assumeIsolated {
+                self.sampleMemory()
+                self.sampleCpu()
             }
         }
     }
@@ -83,50 +53,63 @@ final class SystemInfoResourceHelper {
         guard isMonitoring else { return }
         isMonitoring = false
 
-        memoryUpdateTimer?.invalidate()
-        memoryUpdateTimer = nil
-        cpuCheckTimer?.invalidate()
-        cpuCheckTimer = nil
-
-        lastCpuSampleMachTime = 0
-        lastCpuTotalMicroseconds = 0
-        latestCpuPercent = 0
-        cpuSampleSequence = 0
+        sampleTimer?.invalidate()
+        sampleTimer = nil
+        resetCpuSampleState()
     }
 
     // MARK: - Instant Read
 
     func memoryBytes() -> UInt64 {
-        var info: mach_task_basic_info = mach_task_basic_info()
-        var count: mach_msg_type_number_t = mach_msg_type_number_t(MemoryLayout.size(ofValue: info) / MemoryLayout<integer_t>.size)
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) { infoPtr in
-            return infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { (machPtr: UnsafeMutablePointer<integer_t>) in
-                return task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), machPtr, &count)
-            }
-        }
-        guard kerr == KERN_SUCCESS else {
-            return 0
-        }
-
-        return info.resident_size
+        Self.readMemoryBytes()
     }
 
+    /// 주기 샘플 중이면 캐시를 반환합니다. 아니면 드문 호출용 동기 측정(폴백)입니다.
     func cpuUsage() -> Double {
         if isMonitoring {
             return latestCpuPercent
         }
-        return instantCpuUsage()
+        return Self.readInstantCpuUsage()
     }
 
     // MARK: - Private
 
     @MainActor
-    private func publishSnapshot(isBaselineCpuSample: Bool) {
-        onUpdate?(Snapshot(
-            memoryBytes: memoryBytes(),
-            cpuPercent: latestCpuPercent,
-            isBaselineCpuSample: isBaselineCpuSample
-        ))
+    private func sampleMemory() {
+        onMemoryUpdate?(Self.readMemoryBytes())
+    }
+
+    @MainActor
+    private func sampleCpu() {
+        guard !isCpuSampleInFlight else { return }
+        isCpuSampleInFlight = true
+
+        let lastSampleMachTime = lastCpuSampleMachTime
+        let lastTotalMicroseconds = lastCpuTotalMicroseconds
+
+        Task { @MainActor in
+            let result = await Self.measureCpuUsageDelta(
+                lastSampleMachTime: lastSampleMachTime,
+                lastTotalMicroseconds: lastTotalMicroseconds
+            )
+
+            self.isCpuSampleInFlight = false
+
+            guard self.isMonitoring, result.isValidSample else { return }
+
+            self.lastCpuSampleMachTime = result.sampleMachTime
+            self.lastCpuTotalMicroseconds = result.totalMicroseconds
+            self.latestCpuPercent = result.percent
+            self.onCpuUpdate?(result.percent)
+        }
+    }
+
+    @MainActor
+    private func resetCpuSampleState() {
+        lastCpuSampleMachTime = 0
+        lastCpuTotalMicroseconds = 0
+        latestCpuPercent = 0
+        isCpuSampleInFlight = false
     }
 
     private struct CpuUsageDeltaResult {
@@ -134,7 +117,6 @@ final class SystemInfoResourceHelper {
         let sampleMachTime: UInt64
         let totalMicroseconds: UInt64
         let isValidSample: Bool
-        let isBaselineSample: Bool
     }
 
     @concurrent
@@ -142,13 +124,12 @@ final class SystemInfoResourceHelper {
         lastSampleMachTime: UInt64,
         lastTotalMicroseconds: UInt64
     ) async -> CpuUsageDeltaResult {
-        guard let currentTotalMicroseconds = await totalTaskCPUTimeMicroseconds() else {
+        guard let currentTotalMicroseconds = totalTaskCPUTimeMicroseconds() else {
             return CpuUsageDeltaResult(
                 percent: -1,
                 sampleMachTime: lastSampleMachTime,
                 totalMicroseconds: lastTotalMicroseconds,
-                isValidSample: false,
-                isBaselineSample: false
+                isValidSample: false
             )
         }
 
@@ -158,19 +139,17 @@ final class SystemInfoResourceHelper {
                 percent: 0,
                 sampleMachTime: now,
                 totalMicroseconds: currentTotalMicroseconds,
-                isValidSample: true,
-                isBaselineSample: true
+                isValidSample: true
             )
         }
 
-        let elapsedSeconds = await machTimeToSeconds(now - lastSampleMachTime)
-        guard await elapsedSeconds >= minimumCpuSampleInterval else {
+        let elapsedSeconds = machTimeToSeconds(now - lastSampleMachTime)
+        guard elapsedSeconds >= minimumCpuSampleInterval else {
             return CpuUsageDeltaResult(
                 percent: 0,
                 sampleMachTime: lastSampleMachTime,
                 totalMicroseconds: lastTotalMicroseconds,
-                isValidSample: false,
-                isBaselineSample: false
+                isValidSample: false
             )
         }
 
@@ -179,35 +158,56 @@ final class SystemInfoResourceHelper {
                 percent: 0,
                 sampleMachTime: now,
                 totalMicroseconds: currentTotalMicroseconds,
-                isValidSample: true,
-                isBaselineSample: false
+                isValidSample: true
             )
         }
 
         let deltaMicroseconds = currentTotalMicroseconds - lastTotalMicroseconds
         let elapsedMicroseconds = elapsedSeconds * 1_000_000.0
         let rawPercent = Double(deltaMicroseconds) / elapsedMicroseconds * 100.0
-        let percent = await sanitizedCpuPercent(rawPercent)
+        let percent = sanitizedCpuPercent(rawPercent)
         return CpuUsageDeltaResult(
             percent: percent,
             sampleMachTime: now,
             totalMicroseconds: currentTotalMicroseconds,
-            isValidSample: true,
-            isBaselineSample: false
+            isValidSample: true
         )
     }
 
+    /// 코어 수 × 100%가 물리적 상한입니다. 넘는 값은 0으로 버리지 않고 상한으로 자릅니다.
     private static func sanitizedCpuPercent(_ percent: Double) -> Double {
-        guard percent.isFinite, percent >= 0 else { return 0 }
+        guard percent.isFinite, percent > 0 else { return 0 }
 
-        let maxReasonablePercent = Double(ProcessInfo.processInfo.activeProcessorCount) * 100.0 * 2.0
-        guard percent <= maxReasonablePercent else { return 0 }
-
-        return percent
+        let maxPercent = Double(ProcessInfo.processInfo.activeProcessorCount) * 100.0
+        return min(percent, maxPercent)
     }
 
-    @concurrent
-    private static func totalTaskCPUTimeMicroseconds() async -> UInt64? {
+    private struct TaskBasicSample {
+        let residentBytes: UInt64
+        /// 이미 종료된 스레드들의 누적 CPU 시간.
+        let terminatedThreadMicroseconds: UInt64
+    }
+
+    private static func readTaskBasicSample() -> TaskBasicSample? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: info) / MemoryLayout<integer_t>.size)
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) { infoPtr in
+            return infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { (machPtr: UnsafeMutablePointer<integer_t>) in
+                return task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), machPtr, &count)
+            }
+        }
+        guard kerr == KERN_SUCCESS else {
+            return nil
+        }
+
+        return TaskBasicSample(
+            residentBytes: info.resident_size,
+            terminatedThreadMicroseconds: threadTimeMicroseconds(info.user_time) &+ threadTimeMicroseconds(info.system_time)
+        )
+    }
+
+    /// 살아있는 스레드들의 누적 CPU 시간.
+    private static func liveThreadCPUTimeMicroseconds() -> UInt64? {
         var threadTimes = task_thread_times_info()
         var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: threadTimes) / MemoryLayout<integer_t>.size)
         let kr = withUnsafeMutablePointer(to: &threadTimes) { infoPtr in
@@ -219,15 +219,32 @@ final class SystemInfoResourceHelper {
             return nil
         }
 
-        return await threadTimeMicroseconds(threadTimes.user_time) &+ threadTimeMicroseconds(threadTimes.system_time)
+        return threadTimeMicroseconds(threadTimes.user_time) &+ threadTimeMicroseconds(threadTimes.system_time)
     }
 
-    private func instantCpuUsage() -> Double {
+    /// 프로세스 전체 CPU 시간. 종료된 스레드와 살아있는 스레드를 함께 더하므로
+    /// 스레드가 사라져도 값이 뒤로 가지 않습니다.
+    private static func totalTaskCPUTimeMicroseconds() -> UInt64? {
+        guard let basicSample = readTaskBasicSample(),
+              let liveMicroseconds = liveThreadCPUTimeMicroseconds() else {
+            return nil
+        }
+
+        return basicSample.terminatedThreadMicroseconds &+ liveMicroseconds
+    }
+
+    private static func readMemoryBytes() -> UInt64 {
+        readTaskBasicSample()?.residentBytes ?? 0
+    }
+
+    /// Resource 샘플링이 꺼진 상태에서 FireLog 등 드문 동기 호출용.
+    private static func readInstantCpuUsage() -> Double {
         var threadList: thread_act_array_t?
         var threadCount: mach_msg_type_number_t = 0
         defer {
             if let threadList {
-                vm_deallocate(mach_task_self_, vm_address_t(UnsafePointer(threadList).pointee), vm_size_t(threadCount))
+                let byteSize = vm_size_t(threadCount) * vm_size_t(MemoryLayout<thread_act_t>.stride)
+                vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threadList)), byteSize)
             }
         }
 
@@ -250,13 +267,26 @@ final class SystemInfoResourceHelper {
                 return -1
             }
 
-            let basicInfo = Self.convertThreadInfoToThreadBasicInfo(threadInfo)
+            let basicInfo = convertThreadInfoToThreadBasicInfo(threadInfo)
             guard basicInfo.flags != TH_FLAGS_IDLE else { continue }
 
             totalCpu += (Double(basicInfo.cpu_usage) / Double(TH_USAGE_SCALE)) * 100.0
         }
 
         return totalCpu
+    }
+
+    private static func convertThreadInfoToThreadBasicInfo(_ threadInfo: [integer_t]) -> thread_basic_info {
+        var result = thread_basic_info()
+        result.user_time = time_value_t(seconds: threadInfo[0], microseconds: threadInfo[1])
+        result.system_time = time_value_t(seconds: threadInfo[2], microseconds: threadInfo[3])
+        result.cpu_usage = threadInfo[4]
+        result.policy = threadInfo[5]
+        result.run_state = threadInfo[6]
+        result.flags = threadInfo[7]
+        result.suspend_count = threadInfo[8]
+        result.sleep_time = threadInfo[9]
+        return result
     }
 
     private static func threadTimeMicroseconds(_ time: time_value_t) -> UInt64 {
@@ -266,20 +296,5 @@ final class SystemInfoResourceHelper {
     private static func machTimeToSeconds(_ machTime: UInt64) -> Double {
         let nanos = Double(machTime) * Double(machTimebase.numer) / Double(machTimebase.denom)
         return nanos / 1_000_000_000.0
-    }
-
-    private static func convertThreadInfoToThreadBasicInfo(_ threadInfo: [integer_t]) -> thread_basic_info {
-        var result = thread_basic_info()
-
-        result.user_time = time_value_t(seconds: threadInfo[0], microseconds: threadInfo[1])
-        result.system_time = time_value_t(seconds: threadInfo[2], microseconds: threadInfo[3])
-        result.cpu_usage = threadInfo[4]
-        result.policy = threadInfo[5]
-        result.run_state = threadInfo[6]
-        result.flags = threadInfo[7]
-        result.suspend_count = threadInfo[8]
-        result.sleep_time = threadInfo[9]
-
-        return result
     }
 }

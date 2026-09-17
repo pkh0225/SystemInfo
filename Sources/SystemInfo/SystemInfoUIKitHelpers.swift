@@ -74,7 +74,7 @@ extension UIView {
     @discardableResult
     public func addLongPressGesture(_ closure: @escaping (_ recognizer: UIGestureRecognizer) -> Void) -> UILongPressGestureRecognizer {
         let sleeve = ClosureSleeve(closure)
-        let longPress: UILongPressGestureRecognizer = UILongPressGestureRecognizer(target: sleeve, action: #selector(ClosureSleeve.invoke))
+        let longPress = UILongPressGestureRecognizer(target: sleeve, action: #selector(ClosureSleeve.invoke))
         addGestureRecognizer(longPress)
         isUserInteractionEnabled = true
         objc_setAssociatedObject(self, &LongPressGesture_Key, sleeve, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN_NONATOMIC)

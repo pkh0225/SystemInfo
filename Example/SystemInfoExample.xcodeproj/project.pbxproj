@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -15,12 +15,15 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1696507BD4394582B11F875D /* SwiftLint.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = SwiftLint.sh; sourceTree = "<group>"; };
 		A10000020000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A10000020000000000000002 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A10000020000000000000003 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		A10000020000000000000004 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000020000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000030000000000000001 /* SystemInfoExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SystemInfoExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE44ACD722D6438CBBF78679 /* .swiftlint.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; name = .swiftlint.yml; path = ../.swiftlint.yml; sourceTree = "<group>"; };
+		EBEE128EC02D41229255D4CA /* swiftlint_korean.awk */ = {isa = PBXFileReference; lastKnownFileType = text; path = swiftlint_korean.awk; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -35,9 +38,19 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		94F10A5E5E88455EB15B5DB9 /* Script */ = {
+			isa = PBXGroup;
+			children = (
+				EA740CA1F8CA44F6B3C4D6F9 /* lint */,
+			);
+			name = Script;
+			sourceTree = "<group>";
+		};
 		A10000060000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				DE44ACD722D6438CBBF78679 /* .swiftlint.yml */,
+				94F10A5E5E88455EB15B5DB9 /* Script */,
 				A10000060000000000000002 /* SystemInfoExample */,
 				A10000060000000000000003 /* Products */,
 			);
@@ -63,6 +76,16 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		EA740CA1F8CA44F6B3C4D6F9 /* lint */ = {
+			isa = PBXGroup;
+			children = (
+				1696507BD4394582B11F875D /* SwiftLint.sh */,
+				EBEE128EC02D41229255D4CA /* swiftlint_korean.awk */,
+			);
+			name = lint;
+			path = ../Script/lint;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -73,6 +96,7 @@
 				A10000080000000000000001 /* Sources */,
 				A10000040000000000000001 /* Frameworks */,
 				A10000080000000000000002 /* Resources */,
+				960677A4C42547B5842F495F /* Run Script : Swiftlint */,
 			);
 			buildRules = (
 			);
@@ -111,7 +135,7 @@
 			);
 			mainGroup = A10000060000000000000001;
 			packageReferences = (
-				A100000B0000000000000001 /* XCLocalSwiftPackageReference "../" */,
+				A100000B0000000000000001 /* XCLocalSwiftPackageReference ".." */,
 			);
 			productRefGroup = A10000060000000000000003 /* Products */;
 			projectDirPath = "";
@@ -132,6 +156,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		960677A4C42547B5842F495F /* Run Script : Swiftlint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Run Script : Swiftlint";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# SwiftLint + 한글 워닝\n/bin/sh \"${SRCROOT}/../Script/lint/SwiftLint.sh\" \"${SRCROOT}/..\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A10000080000000000000001 /* Sources */ = {
@@ -259,7 +305,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A100000B0000000000000001 /* XCLocalSwiftPackageReference "../" */ = {
+		A100000B0000000000000001 /* XCLocalSwiftPackageReference ".." */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ..;
 		};
@@ -268,7 +314,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		A10000050000000000000001 /* SystemInfo */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A100000B0000000000000001 /* XCLocalSwiftPackageReference "../" */;
+			package = A100000B0000000000000001 /* XCLocalSwiftPackageReference ".." */;
 			productName = SystemInfo;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -100,14 +100,16 @@ final class ViewController: UIViewController {
         }, for: .valueChanged)
 
         thermalSwitch.addAction(UIAction { [weak self] _ in
-            self?.manager.isThermalReport = self?.thermalSwitch.isOn ?? false
+            let isOn = self?.thermalSwitch.isOn ?? false
+            self?.manager.isThermalOverlayVisible = isOn
+            self?.manager.isThermalReport = isOn
         }, for: .valueChanged)
     }
 
     private func syncSwitchesFromManager() {
         resourceSwitch.isOn = manager.isResourceReport
         fpsSwitch.isOn = manager.isFpsReport
-        thermalSwitch.isOn = manager.isThermalReport
+        thermalSwitch.isOn = manager.isThermalOverlayVisible
     }
 
     private func startRefreshTimer() {

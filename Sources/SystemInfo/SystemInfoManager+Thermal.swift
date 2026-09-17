@@ -11,9 +11,7 @@ extension SystemInfoManager {
 
     @MainActor
     func startThermalReportOnMainActor() {
-        guard ensureOverlayView() != nil else { return }
-
-        overlayView?.setRowVisible(.thermal, visible: true)
+        showThermalOverlayRowIfNeeded()
         thermalHelper.startMonitoring()
 
         let state = thermalHelper.currentState
@@ -36,6 +34,8 @@ extension SystemInfoManager {
         guard isThermalReport else { return }
 
         updateThermalLabel(for: snapshot.state)
+        updateThermalWarningOverlay(for: snapshot.state)
+
         guard snapshot.previousState != snapshot.state else { return }
 
         let current = snapshot.state
@@ -50,12 +50,34 @@ extension SystemInfoManager {
     // MARK: - UI
 
     @MainActor
+    func refreshThermalOverlayRow() {
+        guard isThermalReport else { return }
+
+        if isThermalOverlayVisible {
+            showThermalOverlayRowIfNeeded()
+            updateThermalLabel(for: thermalHelper.currentState)
+        }
+        else {
+            overlayView?.setRowVisible(.thermal, visible: false)
+            removeOverlayViewIfNeeded()
+        }
+    }
+
+    @MainActor
+    private func showThermalOverlayRowIfNeeded() {
+        guard isThermalOverlayVisible else { return }
+
+        ensureOverlayView()?.setRowVisible(.thermal, visible: true)
+    }
+
+    @MainActor
     private func updateThermalLabel(for state: ProcessInfo.ThermalState) {
+        guard isThermalOverlayVisible else { return }
+
         overlayView?.updateThermal(
             text: SystemInfoThermalHelper.displayText(for: state),
             textColor: SystemInfoThermalHelper.isSeriousOrAbove(state) ? .red : .yellow
         )
-        updateThermalWarningOverlay(for: state)
     }
 
     @MainActor

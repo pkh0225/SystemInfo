@@ -6,7 +6,7 @@
 import UIKit
 import DragAbleView
 
-public class SystemInfoOverlayView: DragAbleView {
+public final class SystemInfoOverlayView: DragAbleView {
     enum Row: Int, CaseIterable {
         case cpu
         case memory
@@ -124,7 +124,7 @@ public class SystemInfoOverlayView: DragAbleView {
         window.bringSubviewToFront(self)
     }
 
-    public override func removeFromSuperview() {
+    override public func removeFromSuperview() {
         super.removeFromSuperview()
         isDragConfigured = false
     }
@@ -181,7 +181,7 @@ public class SystemInfoOverlayView: DragAbleView {
         }
     }
 
-    public override func layoutSubviews() {
+    override public func layoutSubviews() {
         super.layoutSubviews()
         blurView.frame = bounds
         relayoutContent()
@@ -196,10 +196,19 @@ public class SystemInfoOverlayView: DragAbleView {
 
     private func updateRow(_ row: Row, text: String, textColor: UIColor) {
         let rowView = rowView(for: row)
+        let textChanged = rowView.valueLabel.text != text
+        let previousIsWarning = rowView.valueLabel.textColor == UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1)
+        let nextIsWarning = textColor == .red
+        let appearanceChanged = previousIsWarning != nextIsWarning
+
+        guard textChanged || appearanceChanged else { return }
+
         rowView.valueLabel.text = text
         rowView.applyValueAppearance(textColor: textColor)
         rowView.accessibilityValue = text
-        relayoutContent()
+        if textChanged {
+            relayoutContent()
+        }
     }
 
     private func relayoutContent() {
